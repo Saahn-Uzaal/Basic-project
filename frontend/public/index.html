@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Task Manager</h1>
+      <p class="subtitle">Node.js · Spring Boot · MariaDB</p>
+    </header>
+
+    <form id="task-form" class="card">
+      <input id="title" name="title" placeholder="Tiêu đề công việc" maxlength="200" required>
+      <textarea id="description" name="description" placeholder="Mô tả (không bắt buộc)" maxlength="1000" rows="2"></textarea>
+      <div class="form-actions">
+        <button type="submit" id="submit-btn">Thêm</button>
+        <button type="button" id="cancel-btn" class="secondary" hidden>Hủy</button>
+      </div>
+    </form>
+
+    <p id="message" class="message" hidden></p>
+
+    <ul id="task-list" class="task-list"></ul>
+    <p id="empty" class="empty" hidden>Chưa có công việc nào.</p>
+  </main>
+
+  <template id="task-template">
+    <li class="task card">
+      <label class="task-main">
+        <input type="checkbox" class="task-toggle">
+        <span>
+          <strong class="task-title"></strong>
+          <small class="task-desc"></small>
+        </span>
+      </label>
+      <div class="task-actions">
+        <button class="secondary task-edit">Sửa</button>
+        <button class="danger task-delete">Xóa</button>
+      </div>
+    </li>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

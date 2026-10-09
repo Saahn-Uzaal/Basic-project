@@ -1,0 +1,49 @@
+services:
+  db1:
+    image: mariadb:11.4
+    container_name: mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: basic_app
+      MARIADB_USER: app_user
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - /db/mariadb-1:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "127.0.0.1:3307:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./backend
+    image: backend:v1
+    container_name: backend
+    restart: always
+    environment:
+      DB_HOST: db1
+      DB_PORT: 3306
+      DB_NAME: basic_app
+      DB_USER: app_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "127.0.0.1:8888:8080"
+    depends_on:
+      db1:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    image: frontend:v1
+    container_name: frontend
+    restart: always
+    ports:
+      - "81:80"
+    depends_on:
+      - backend

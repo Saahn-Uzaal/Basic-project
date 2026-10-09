@@ -1,0 +1,38 @@
+---
+- name: Deploy Docker containers from VM1 to VM2
+  hosts: hung134
+  become: true
+
+  tasks:
+    - name: Create the project directory on VM2
+      ansible.builtin.file:
+        path: /home/hung134/project
+        state: directory
+        owner: hung134
+        mode: "0755"
+
+    - name: Synchronize source from VM1 to VM2
+      ansible.posix.synchronize:
+        src: /home/hung134/Basic-project/
+        dest: /home/hung134/project/
+        delete: true
+        owner: false
+        group: false
+        rsync_opts:
+          - --exclude=.git
+          - --exclude=ansible
+          - --exclude=node_modules
+          - --exclude=target
+          - --exclude=.idea
+          - --exclude=.vscode
+          - --exclude=deploy.yml
+          - --exclude=inventory.ini
+      become: false
+
+    - name: Build images and start containers on VM2
+      community.docker.docker_compose_v2:
+        project_src: /home/hung134/project
+        files:
+          - docker-compose.yml
+        build: always
+        state: present
