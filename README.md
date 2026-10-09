@@ -26,8 +26,6 @@ sudo apt update
 sudo apt install -y git
 ~~~
 
-Repository này được tạo ở chế độ riêng tư. Tài khoản GitHub dùng để clone phải có quyền truy cập repository. Với clone qua HTTPS, khi Git hỏi mật khẩu, dùng GitHub Personal Access Token có quyền đọc repository, thay cho mật khẩu tài khoản. Không viết token vào URL hoặc file cấu hình. Xem [hướng dẫn xác thực GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github).
-
 Lấy code:
 
 ~~~bash
@@ -49,30 +47,21 @@ inventory.ini
 README.md
 ~~~
 
-Nếu đã clone trước đó, không clone lại vào cùng thư mục. Để lấy bản mới khi không có thay đổi local xung đột, dùng `git pull --ff-only` trong thư mục project.
+
 
 ## Bước 2. Cài Ansible trên VM1
 
 **Thực hiện trên VM1.** Nếu Ansible đã có, kiểm tra phiên bản và hai collection rồi bỏ qua phần cài.
 
 ~~~bash
-sudo apt install -y python3-venv python3-pip rsync openssh-client curl
-python3 -m venv ~/.venvs/ansible
-source ~/.venvs/ansible/bin/activate
-python -m pip install --upgrade pip
-python -m pip install ansible
-ansible-galaxy collection install ansible.posix community.docker
-ansible --version
-ansible-galaxy collection list
+sudo apt update
+sudo apt install software-properties-common
+sudo apt-add-repository ppa:ansible/ansible
+sudo apt install ansible
+sudo apt install -y rsync openssh-client curl
 ~~~
 
-Nếu dùng môi trường ảo trên, mỗi lần mở terminal mới chạy:
 
-~~~bash
-source ~/.venvs/ansible/bin/activate
-~~~
-
-Phần cài này dành cho VM1 Ubuntu 24.04. Nếu dùng Ubuntu/Python khác, chọn bản Ansible tương thích theo [tài liệu cài Ansible](https://docs.ansible.com/projects/ansible/latest/installation_guide/intro_installation.html).
 
 ## Bước 3. Chuẩn bị VM2
 
@@ -84,7 +73,7 @@ Phần cài này dành cho VM1 Ubuntu 24.04. Nếu dùng Ubuntu/Python khác, ch
 ssh hung134@192.168.88.69
 ~~~
 
-Nhập mật khẩu đăng nhập user `hung134` trên VM2. Sau khi đăng nhập, các lệnh trong terminal này chạy trên VM2.
+Nhập mật khẩu đăng nhập user `hung134` trên VM2.
 
 Nếu báo `Connection refused`, kiểm tra IP và SSH server tại console VM2. Có thể cài và bật SSH server trên VM2 bằng:
 
@@ -105,36 +94,41 @@ sudo apt update
 sudo apt install -y python3 rsync ca-certificates curl
 ~~~
 
-Hai lệnh đầu cần trả về `hung134` và `root`. Nếu user không có quyền sudo, cần cấp quyền bằng tài khoản quản trị VM2 trước khi tiếp tục.
+
 
 ### 3.3. Cài Docker và Compose plugin
 
-**Chạy trên VM2.** Nếu đã cài, kiểm tra trước:
-
-~~~bash
-sudo docker version
-sudo docker compose version
+**Chạy trên VM2.** 
+Tạo file .sh để cài đặt docer
 ~~~
-
-Nếu cả hai lệnh chạy được thì bỏ qua phần cài. Với VM2 Ubuntu mới chưa có Docker:
+nano docker-install.sh
+~~~
+Rồi điền nội dung sau vào docker-install.sh
 
 ~~~bash
-sudo install -d -m 0755 /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod 0644 /etc/apt/keyrings/docker.asc
-. /etc/os-release
-ubuntu_suite="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
-docker_arch="$(dpkg --print-architecture)"
-printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu %s stable\n' "$docker_arch" "$ubuntu_suite" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+#!/bin/bash
 sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo systemctl enable --now docker
-sudo docker run --rm hello-world
-sudo docker compose version
+sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt update
+sudo apt install -y docker-ce
+sudo systemctl start docker
+sudo systemctl enable docker
+
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+docker --version
+docker-compose --version
 ~~~
-
-Nếu máy đã có Docker từ nguồn khác và gặp xung đột package, xử lý theo [hướng dẫn Docker cho Ubuntu](https://docs.docker.com/engine/install/ubuntu/). Module Ansible cần Compose plugin từ phiên bản `2.18.0`; sử dụng lệnh `docker compose`.
-
+rồi sau đó chạy file .sh
+~~~
+bash docker-install.sh
+~~~
 Thoát SSH để quay về VM1:
 
 ~~~bash
@@ -143,7 +137,7 @@ exit
 
 ## Bước 4. Thiết lập SSH key từ VM1 sang VM2
 
-**Thực hiện trên VM1.** Bước đồng bộ source dùng rsync qua SSH, cần kết nối không hỏi mật khẩu SSH. Xem [điều kiện của module synchronize](https://docs.ansible.com/projects/ansible/latest/collections/ansible/posix/synchronize_module.html).
+**Thực hiện trên VM1.** Bước đồng bộ source dùng rsync qua SSH, cần kết nối không hỏi mật khẩu SSH. 
 
 Kiểm tra đã có key chưa:
 
@@ -201,8 +195,6 @@ chmod 600 .env
 ~~~
 
 `DB_ROOT_PASSWORD` là mật khẩu root MariaDB. `DB_PASSWORD` là mật khẩu user `app_user`, được backend dùng để kết nối database.
-
-File này không có trong GitHub nên phải tự tạo. Playbook sẽ đồng bộ nó sang VM2. Nếu triển khai lại trên database đã có dữ liệu, giữ mật khẩu đang dùng; sửa `.env` không tự đổi mật khẩu trong database.
 
 ## Bước 6. Kiểm tra file docker-compose.yml
 
@@ -266,9 +258,7 @@ services:
       - backend
 ~~~
 
-Giữ các cấu hình trên nếu dùng đúng project này. Nếu cổng `81` trên VM2 đã được dùng, đổi phần bên trái của `81:80` thành cổng trống và dùng cổng mới khi truy cập web. Hai Dockerfile và cấu hình Nginx đã có sẵn, không cần sửa để triển khai theo hướng dẫn.
 
-Database sẽ lưu tại `/db/mariadb-1` trên **VM2**. Không xóa thư mục này nếu cần giữ dữ liệu. Backend kết nối database bằng tên service `db1` và cổng nội bộ `3306`.
 
 ## Bước 7. Cấu hình file inventory.ini
 
@@ -285,7 +275,7 @@ Với VM2 dùng sudo thông thường, sửa thành:
 hung134 ansible_host=192.168.88.69 ansible_user=hung134
 ~~~
 
-Thay `ansible_host` bằng IP VM2 và `ansible_user` bằng user SSH VM2. Tên `hung134` đầu dòng là alias của máy trong inventory; playbook ở bước 8 chọn alias này.
+
 
 Nếu VM2 dùng `sudo-rs` và Ansible gặp lỗi chờ prompt sudo, kiểm tra từ VM1:
 
@@ -300,7 +290,7 @@ Nếu có `/usr/bin/sudo.ws`, dùng cấu hình sau để Ansible gọi binary �
 hung134 ansible_host=192.168.88.69 ansible_user=hung134 ansible_become_exe=/usr/bin/sudo.ws
 ~~~
 
-Repository hiện có dòng `ansible_become_exe` này do cấu hình máy đích ban đầu. Bỏ tham số khi VM2 không có `sudo.ws`. Tham khảo [ghi chú Ubuntu về sudo-rs](https://ubuntu.com/server/docs/reference/other-tools/sudo-rs/).
+
 
 ## Bước 8. Cấu hình file deploy.yml
 
@@ -362,29 +352,18 @@ Nếu IP/user/thư mục khác ví dụ, chỉnh các vị trí:
 | `owner` | User SSH VM2 |
 | `src` | Thư mục chứa code trên VM1, giữ dấu `/` cuối đường dẫn |
 
-`delete: true` có thể xóa file trong thư mục đích nếu file không còn trong nguồn, trừ các file bị exclude. Dùng thư mục đích riêng cho project. Database ở `/db/mariadb-1` nằm ngoài thư mục đồng bộ.
 
 ## Bước 9. Kiểm tra cấu hình và chạy triển khai
 
 **Thực hiện trên VM1:**
 
-~~~bash
-cd /home/hung134/Basic-project
-ansible-playbook -i inventory.ini deploy.yml --syntax-check
-ansible-playbook -i inventory.ini deploy.yml --list-hosts
-ansible hung134 -i inventory.ini -m ansible.builtin.ping
-ansible hung134 -i inventory.ini -m ansible.builtin.command -a 'id -un' -b -K
-~~~
-
-Kết quả cần đạt: không lỗi cú pháp; danh sách host có `hung134`; ping trả `pong`; lệnh kiểm tra sudo trả `root`.
-
 Chạy deploy:
 
 ~~~bash
-ansible-playbook -i inventory.ini deploy.yml -K
+ansible-playbook -i inventory.ini deploy.yml -k -K
 ~~~
 
-Nhập **mật khẩu sudo của user trên VM2** khi thấy `BECOME password`. `-K` viết hoa hỏi mật khẩu sudo; `-k` viết thường hỏi mật khẩu SSH. Sau bước SSH key, dùng `-K`.
+Nhập **mật khẩu sudo của user trên VM2** khi thấy `BECOME password`. `-K` viết hoa hỏi mật khẩu sudo; `-k` viết thường hỏi mật khẩu SSH. 
 
 Ansible tạo thư mục, đồng bộ source rồi build và chạy container trên VM2. Chờ lệnh hoàn tất; lần đầu có thể mất vài phút. `PLAY RECAP` cần có `failed=0` và `unreachable=0`.
 
@@ -407,45 +386,4 @@ curl -fsS http://192.168.88.69:81/api/tasks
 
 Trang chủ cần trả HTTP `200`; API trả mảng JSON. Mở **http://192.168.88.69:81** trong trình duyệt và thử thêm, sửa, đánh dấu hoàn thành, xóa một công việc thử nghiệm.
 
-Kiểm tra backend qua localhost VM2:
 
-~~~bash
-ssh hung134@192.168.88.69 'curl -fsS http://127.0.0.1:8888/actuator/health'
-~~~
-
-Kết quả cần có `"status":"UP"`. Playbook không chờ HTTP; nếu API trả `502` ngay sau deploy, đợi backend khởi động rồi thử lại. Nếu lỗi kéo dài, xem log:
-
-~~~bash
-ssh -t hung134@192.168.88.69 'cd /home/hung134/project && sudo docker compose logs --tail=100 backend db1 frontend'
-~~~
-
-## Bước 11. Lấy code mới và triển khai lại
-
-**Thực hiện trên VM1:**
-
-~~~bash
-cd /home/hung134/Basic-project
-git pull --ff-only
-source ~/.venvs/ansible/bin/activate
-ansible-playbook -i inventory.ini deploy.yml -K
-~~~
-
-Chỉ chạy dòng kích hoạt venv nếu đã cài Ansible theo bước 2. Nếu đã sửa inventory/playbook/Compose trên VM1 và Git báo xung đột khi pull, giữ lại các cấu hình của mình, xử lý thay đổi Git trước rồi mới deploy.
-
-Sau deploy, kiểm tra lại theo bước 10. Dữ liệu database được giữ trong `/db/mariadb-1` trên VM2. `init.sql` chỉ chạy khi khởi tạo database lần đầu; thay file này hoặc `.env` không tự cập nhật database đã tồn tại. Xem [cơ chế khởi tạo MariaDB](https://mariadb.com/docs/server/server-management/automated-mariadb-deployment-and-administration/docker-and-mariadb/mariadb-server-docker-official-image-environment-variables).
-
-## Khi gặp lỗi
-
-| Lỗi | Việc cần làm |
-|---|---|
-| Clone báo `Repository not found` hoặc xác thực thất bại | Kiểm tra tài khoản có quyền đọc repository riêng tư; dùng PAT khi clone HTTPS |
-| `Could not match supplied host pattern` | Cho `hosts` khớp alias/nhóm trong inventory |
-| `sudo: interactive authentication is required` | Chạy với `-K` viết hoa; kiểm tra quyền sudo trên VM2 |
-| `Timeout ... privilege escalation prompt` | Kiểm tra sudo ở bước 7, chỉ dùng `sudo.ws` khi binary tồn tại |
-| rsync báo `Permission denied (publickey,password)` | Làm lại bước 4; SSH BatchMode phải thành công |
-| rsync không ghi được thư mục đích | Cho `owner` khớp user SSH VM2 |
-| Không tìm thấy module | Cài `ansible.posix`, `community.docker` trong đúng môi trường Ansible |
-| Không tìm thấy Docker/Compose | Kiểm tra cài đặt và dịch vụ Docker trên VM2 ở bước 3 |
-| Biến mật khẩu chưa được đặt | Kiểm tra `.env` ở thư mục project trên VM1 |
-| Backend báo `Access denied for user` | Kiểm tra mật khẩu khớp database đã khởi tạo; không chỉ đổi `.env` |
-| Web không truy cập được cổng `81` | Kiểm tra IP, container, cổng publish và kết nối mạng |
